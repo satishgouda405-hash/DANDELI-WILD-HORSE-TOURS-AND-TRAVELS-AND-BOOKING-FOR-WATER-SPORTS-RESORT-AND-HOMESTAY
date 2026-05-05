@@ -29,9 +29,9 @@ function App() {
     setBookingModalOpen(true);
   };
 
-  // FIX: Snap to the START of each pinned section, not its center.
-  // Snapping to center caused users to land mid-animation (black void).
+  // Global scroll snap for pinned sections
   useEffect(() => {
+    // Wait for all sections to mount and ScrollTriggers to initialize
     const timer = setTimeout(() => {
       const pinned = ScrollTrigger.getAll()
         .filter((st) => st.vars.pin)
@@ -40,14 +40,32 @@ function App() {
       const maxScroll = ScrollTrigger.maxScroll(window);
       if (!maxScroll || pinned.length === 0) return;
 
-      // Snap targets = start of each pinned section
-      const snapTargets = pinned.map((st) => st.start / maxScroll);
+      // Build ranges and snap targets from pinned sections
+      const pinnedRanges = pinned.map((st) => ({
+        start: st.start / maxScroll,
+        end: (st.end ?? st.start) / maxScroll,
+        center: (st.start + ((st.end ?? st.start) - st.start) * 0.5) / maxScroll,
+      }));
 
       ScrollTrigger.create({
         snap: {
-          snapTo: snapTargets,
+          snapTo: (value: number) => {
+            // Check if within any pinned range (with small buffer)
+            const inPinned = pinnedRanges.some(
+              (r) => value >= r.start - 0.02 && value <= r.end + 0.02
+            );
+            if (!inPinned) return value; // flowing section: free scroll
+
+            // Find nearest pinned center
+            const target = pinnedRanges.reduce(
+              (closest, r) =>
+                Math.abs(r.center - value) < Math.abs(closest - value) ? r.center : closest,
+              pinnedRanges[0]?.center ?? 0
+            );
+            return target;
+          },
           duration: { min: 0.15, max: 0.35 },
-          delay: 0.05,
+          delay: 0,
           ease: 'power2.out',
         },
       });
